@@ -6,10 +6,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.3' # غيرناها من 3.19.0 إلى 3.19.3
+          flutter-version: '3.19.3' # نسخة مستقرة تضمن التوافق
           channel: 'stable'
+      
+      - name: Recreate Android Files
+        run: flutter create . --platforms android # هذه الخطوة ستصلح خطأ Gradle
       
       - name: Get dependencies
         run: flutter pub get
@@ -17,7 +22,7 @@ jobs:
       - name: Build Release APK
         run: flutter build apk --release
 
-      - name: Save APK
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: PC-Monitor-App

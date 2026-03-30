@@ -1,34 +1,21 @@
-name: Build Monitor APK
+name: Build Pro Monitor
 on: [push]
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.19.3'
-          channel: 'stable'
-      
-      - name: Recreate Android Project
-        run: flutter create . --platforms android
-      
-      # هذه هي الخطوة الجديدة التي ستحل مشكلة الاتصال
-      - name: Enable Cleartext Traffic (Fix Connection Error)
+      - name: Fix Manifest & Permissions
         run: |
+          flutter create . --platforms android
           sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
-          
-      - name: Get dependencies
-        run: flutter pub get
-
-      - name: Build Release APK
-        run: flutter build apk --release
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+          sed -i '/<\/manifest>/i <uses-permission android:name="android.permission.INTERNET" \/><uses-permission android:name="android.permission.CAMERA" \/>' android/app/src/main/AndroidManifest.xml
+      - run: flutter pub add mobile_scanner web_socket_channel
+      - run: flutter build apk --release
+      - uses: actions/upload-artifact@v4
         with:
-          name: PC-Monitor-App
+          name: Pro-Monitor-APK
           path: build/app/outputs/flutter-apk/app-release.apk

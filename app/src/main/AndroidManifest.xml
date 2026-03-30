@@ -1,0 +1,30 @@
+<manifest xmlns:android="http://schemas.microsoft.com/apk/res/android"
+    package="com.example.resource_ui"> <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:label="PC Monitor"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+        @Image of AndroidManifest.xml structure in a Flutter project]
+        @Image of Network Security Configuration in Android]
+        android:usesCleartextTraffic="true">
+        
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

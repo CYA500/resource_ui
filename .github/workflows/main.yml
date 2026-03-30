@@ -8,28 +8,21 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.19.3'
-          channel: 'stable'
 
-      - name: Auto-Fix Android Config & SDK Version
+      - name: Setup Android SDK
         run: |
           flutter create . --platforms android
-          # 1. رفع نسخة الـ SDK إلى 21 لتشغيل الكاميرا
           sed -i 's/minSdkVersion .*/minSdkVersion 21/' android/app/build.gradle
-          # 2. السماح بالاتصال غير المشفر (HTTP/WS)
           sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
-          # 3. إضافة تصاريح الإنترنت والكاميرا
           sed -i '/<\/manifest>/i <uses-permission android:name="android.permission.INTERNET" \/><uses-permission android:name="android.permission.CAMERA" \/>' android/app/src/main/AndroidManifest.xml
-
-      - name: Install Dependencies
-        run: flutter pub add mobile_scanner web_socket_channel
 
       - name: Build APK
         run: |
           flutter pub get
           flutter build apk --release --no-tree-shake-icons
-          
-      - name: Upload Artifact
+
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Pro-Monitor-APK
+          name: Monitor-PRO
           path: build/app/outputs/flutter-apk/app-release.apk

@@ -10,12 +10,17 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.3' # نسخة مستقرة تضمن التوافق
+          flutter-version: '3.19.3'
           channel: 'stable'
       
-      - name: Recreate Android Files
-        run: flutter create . --platforms android # هذه الخطوة ستصلح خطأ Gradle
+      - name: Recreate Android Project
+        run: flutter create . --platforms android
       
+      # هذه هي الخطوة الجديدة التي ستحل مشكلة الاتصال
+      - name: Enable Cleartext Traffic (Fix Connection Error)
+        run: |
+          sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
+          
       - name: Get dependencies
         run: flutter pub get
 

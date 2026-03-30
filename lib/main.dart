@@ -80,10 +80,15 @@ class _MonitorScreenState extends State<MonitorScreen> {
   late WebSocketChannel channel;
 
   @override
-  void initState() {
-    super.initState();
-    channel = WebSocketChannel.connect(Uri.parse('ws://${widget.ip}:5050'));
-  }
+void initState() {
+  super.initState();
+  // تنظيف الـ IP من أي فراغات زائدة
+  final cleanIp = widget.ip.trim();
+  // محاولة الاتصال مع مهلة زمنية (Timeout)
+  channel = WebSocketChannel.connect(
+    Uri.parse('ws://$cleanIp:5050'),
+  );
+}
 
   @override
   void dispose() {

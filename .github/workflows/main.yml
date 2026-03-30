@@ -8,14 +8,24 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.19.3'
-      - name: Fix Manifest & Permissions
+          channel: 'stable'
+
+      - name: Auto-Fix Android Config
         run: |
           flutter create . --platforms android
+          # السماح بالاتصال غير المشفر
           sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
+          # إضافة تصريح الإنترنت والكاميرا
           sed -i '/<\/manifest>/i <uses-permission android:name="android.permission.INTERNET" \/><uses-permission android:name="android.permission.CAMERA" \/>' android/app/src/main/AndroidManifest.xml
-      - run: flutter pub add mobile_scanner web_socket_channel
-      - run: flutter build apk --release
-      - uses: actions/upload-artifact@v4
+
+      - name: Install Dependencies
+        run: flutter pub add mobile_scanner web_socket_channel
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
           name: Pro-Monitor-APK
           path: build/app/outputs/flutter-apk/app-release.apk

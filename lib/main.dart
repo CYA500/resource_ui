@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:glass_kit/glass_kit.dart';
 import 'dart:convert';
@@ -8,7 +9,6 @@ void main() => runApp(const MaterialApp(
   debugShowCheckedModeBanner: false,
 ));
 
-// شاشة إدخال الـ IP
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
   @override
@@ -19,11 +19,12 @@ class _SetupScreenState extends State<SetupScreen> {
   final TextEditingController _ipController = TextEditingController();
 
   void _connect() {
-    if (_ipController.text.isNotEmpty) {
+    String ip = _ipController.text.trim();
+    if (ip.isNotEmpty) {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => MonitorScreen(ip: _ipController.text),
+          builder: (context) => MonitorScreen(ip: ip),
         ),
       );
     }
@@ -38,27 +39,34 @@ class _SetupScreenState extends State<SetupScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.monitor_heart, size: 80, color: Colors.blueAccent),
-            const SizedBox(height: 20),
+            const Icon(Icons.monitor_heart, size: 80, color: Colors.cyanAccent),
+            const SizedBox(height: 30),
             TextField(
               controller: _ipController,
+              keyboardType: TextInputType.number,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: "Enter PC IP (e.g. 192.168.1.5)",
+                hintText: "Enter PC IP (e.g. 192.168.1.106)",
                 hintStyle: const TextStyle(color: Colors.white54),
                 filled: true,
                 fillColor: Colors.white10,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: const BorderSide(color: Colors.cyanAccent),
+                  borderRadius: BorderRadius.circular(15),
+                ),
               ),
             ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _connect,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blueAccent,
-                minimumSize: const Size(double.infinity, 50),
+                backgroundColor: Colors.cyanAccent,
+                foregroundColor: Colors.black,
+                minimumSize: const Size(double.infinity, 55),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
               ),
-              child: const Text("Connect to Windows"),
+              child: const Text("Connect to Windows", style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -67,7 +75,6 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 }
 
-// شاشة العرض الشفافة (Glassmorphism)
 class MonitorScreen extends StatefulWidget {
   final String ip;
   const MonitorScreen({super.key, required this.ip});
@@ -80,15 +87,12 @@ class _MonitorScreenState extends State<MonitorScreen> {
   late WebSocketChannel channel;
 
   @override
-void initState() {
-  super.initState();
-  // تنظيف الـ IP من أي فراغات زائدة
-  final cleanIp = widget.ip.trim();
-  // محاولة الاتصال مع مهلة زمنية (Timeout)
-  channel = WebSocketChannel.connect(
-    Uri.parse('ws://$cleanIp:5050'),
-  );
-}
+  void initState() {
+    super.initState();
+    // استخدام IOWebSocketChannel لضمان أفضل توافق مع الأندرويد
+    final String socketUrl = 'ws://${widget.ip}:5050';
+    channel = IOWebSocketChannel.connect(Uri.parse(socketUrl));
+  }
 
   @override
   void dispose() {
@@ -102,28 +106,55 @@ void initState() {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF0F2027), Color(0xFF2C5364)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364)],
           ),
         ),
         child: Stack(
           children: [
-            Positioned(top: 50, left: 20, child: BackButton(color: Colors.white)),
+            Positioned(
+              top: 50,
+              left: 20,
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
             Center(
               child: StreamBuilder(
                 stream: channel.stream,
                 builder: (context, snapshot) {
-                  if (snapshot.hasError) return const Text("Connection Error", style: TextStyle(color: Colors.red));
-                  if (!snapshot.hasData) return const CircularProgressIndicator();
+                  if (snapshot.hasError) {
+                    return const Text("Connection Error\nCheck IP & Firewall", 
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.redAccent, fontSize: 18));
+                  }
+                  
+                  if (!snapshot.hasData) {
+                    return const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(color: Colors.cyanAccent),
+                        SizedBox(height: 20),
+                        Text("Waiting for Data...", style: TextStyle(color: Colors.white70)),
+                      ],
+                    );
+                  }
 
-                  var data = jsonDecode(snapshot.data);
-                  return Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _glassCard("CPU", "${data['cpu']}%", Colors.greenAccent),
-                      const SizedBox(height: 25),
-                      _glassCard("Available RAM", "${data['ram']} MB", Colors.cyanAccent),
-                    ],
-                  );
+                  try {
+                    var data = jsonDecode(snapshot.data.toString());
+                    return Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildGlassCard("CPU USAGE", "${data['cpu']}%", Colors.greenAccent),
+                        const SizedBox(height: 25),
+                        _buildGlassCard("AVAILABLE RAM", "${data['ram']} MB", Colors.blueAccent),
+                      ],
+                    );
+                  } catch (e) {
+                    return const Text("Data Format Error", style: TextStyle(color: Colors.orange));
+                  }
                 },
               ),
             ),
@@ -133,15 +164,23 @@ void initState() {
     );
   }
 
-  Widget _glassCard(String title, String val, Color col) {
+  Widget _buildGlassCard(String title, String value, Color color) {
     return GlassContainer.frostedGlass(
-      height: 160, width: 320,
+      height: 170,
+      width: 320,
       borderRadius: BorderRadius.circular(30),
+      borderWidth: 1.5,
+      gradient: LinearGradient(
+        colors: [Colors.white.withOpacity(0.1), Colors.white.withOpacity(0.05)],
+      ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(title, style: const TextStyle(color: Colors.white70, fontSize: 18)),
-          Text(val, style: TextStyle(color: col, fontSize: 45, fontWeight: FontWeight.bold)),
+          Text(title, style: const TextStyle(fontSize: 16, color: Colors.white60, letterSpacing: 1.2)),
+          const SizedBox(height: 10),
+          Text(value, style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: color, shadows: [
+            Shadow(color: color.withOpacity(0.5), blurRadius: 20)
+          ])),
         ],
       ),
     );

@@ -1,5 +1,5 @@
 name: resource_ui
-description: "A professional PC resource monitor with remote commands."
+description: "Professional PC Monitor"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -9,13 +9,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
-  # المكتبات الثلاث الأساسية التي طلبتها
   web_socket_channel: ^3.0.1
   mobile_scanner: ^5.1.1
   glass_kit: ^3.0.0
-  
-  # مكتبة إضافية للتعامل مع البيانات بسهولة
+  google_fonts: ^6.2.1
   cupertino_icons: ^1.0.6
 
 dev_dependencies:

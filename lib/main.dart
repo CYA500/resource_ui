@@ -1,31 +1,37 @@
+// تحتاج لإضافة: mobile_scanner: ^5.1.1 في pubspec.yaml
 import 'package:flutter/material.dart';
-import 'package:web_socket_channel/io.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:glass_kit/glass_kit.dart';
-import 'dart:convert';
+import 'services/connection_manager.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
-void main() => runApp(const MaterialApp(
-  home: SetupScreen(),
-  debugShowCheckedModeBanner: false,
-));
+void main() => runApp(const MaterialApp(home: HomeScreen(), debugShowCheckedModeBanner: false));
 
-class SetupScreen extends StatefulWidget {
-  const SetupScreen({super.key});
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
   @override
-  State<SetupScreen> createState() => _SetupScreenState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _SetupScreenState extends State<SetupScreen> {
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   final TextEditingController _ipController = TextEditingController();
 
-  void _connect() {
-    String ip = _ipController.text.trim();
-    if (ip.isNotEmpty) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => MonitorScreen(ip: ip),
-        ),
+  @override
+  void initState() {
+    _tabController = TabController(length: 3, vsync: this);
+    super.initState();
+  }
+
+  void _handleConnection(String address, ConnectionType type) async {
+    showDialog(context: context, builder: (c) => const Center(child: CircularProgressIndicator()));
+    
+    var result = await ConnectionManager.connect(address, type);
+    Navigator.pop(context); // إغلاق الـ Loading
+
+    if (result.success) {
+      // الانتقال لشاشة المراقبة مع تمرير الـ channel
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message), backgroundColor: Colors.redAccent)
       );
     }
   }
@@ -33,156 +39,31 @@ class _SetupScreenState extends State<SetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F2027),
-      body: Padding(
-        padding: const EdgeInsets.all(30.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.monitor_heart, size: 80, color: Colors.cyanAccent),
-            const SizedBox(height: 30),
-            TextField(
-              controller: _ipController,
-              keyboardType: TextInputType.number,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: "Enter PC IP (e.g. 192.168.1.106)",
-                hintStyle: const TextStyle(color: Colors.white54),
-                filled: true,
-                fillColor: Colors.white10,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
-                focusedBorder: OutlineInputBorder(
-                  borderSide: const BorderSide(color: Colors.cyanAccent),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _connect,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.cyanAccent,
-                foregroundColor: Colors.black,
-                minimumSize: const Size(double.infinity, 55),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-              ),
-              child: const Text("Connect to Windows", style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
+      appBar: AppBar(
+        title: const Text("PC Monitor PRO"),
+        bottom: TabBar(controller: _tabController, tabs: const [
+          Tab(icon: Icon(Icons.qr_code_scanner), text: "QR Scan"),
+          Tab(icon: Icon(Icons.lan), text: "Manual IP"),
+          Tab(icon: Icon(Icons.usb), text: "USB Mode"),
+        ]),
+      ),
+      body: TabBarView(controller: _tabController, children: [
+        // QR Tab
+        MobileScanner(onDetect: (capture) {
+          final List<Barcode> barcodes = capture.barcodes;
+          if (barcodes.isNotEmpty) _handleConnection(barcodes.first.rawValue!, ConnectionType.qr);
+        }),
+        // IP Tab
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(children: [
+            TextField(controller: _ipController, decoration: const InputDecoration(labelText: "Enter PC IP")),
+            ElevatedButton(onPressed: () => _handleConnection(_ipController.text, ConnectionType.ip), child: const Text("Connect"))
+          ]),
         ),
-      ),
-    );
-  }
-}
-
-class MonitorScreen extends StatefulWidget {
-  final String ip;
-  const MonitorScreen({super.key, required this.ip});
-
-  @override
-  State<MonitorScreen> createState() => _MonitorScreenState();
-}
-
-class _MonitorScreenState extends State<MonitorScreen> {
-  late WebSocketChannel channel;
-
-  @override
-  void initState() {
-    super.initState();
-    // استخدام IOWebSocketChannel لضمان أفضل توافق مع الأندرويد
-    final String socketUrl = 'ws://${widget.ip}:5050';
-    channel = IOWebSocketChannel.connect(Uri.parse(socketUrl));
-  }
-
-  @override
-  void dispose() {
-    channel.sink.close();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364)],
-          ),
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              top: 50,
-              left: 20,
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
-            Center(
-              child: StreamBuilder(
-                stream: channel.stream,
-                builder: (context, snapshot) {
-                  if (snapshot.hasError) {
-                    return const Text("Connection Error\nCheck IP & Firewall", 
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.redAccent, fontSize: 18));
-                  }
-                  
-                  if (!snapshot.hasData) {
-                    return const Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircularProgressIndicator(color: Colors.cyanAccent),
-                        SizedBox(height: 20),
-                        Text("Waiting for Data...", style: TextStyle(color: Colors.white70)),
-                      ],
-                    );
-                  }
-
-                  try {
-                    var data = jsonDecode(snapshot.data.toString());
-                    return Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildGlassCard("CPU USAGE", "${data['cpu']}%", Colors.greenAccent),
-                        const SizedBox(height: 25),
-                        _buildGlassCard("AVAILABLE RAM", "${data['ram']} MB", Colors.blueAccent),
-                      ],
-                    );
-                  } catch (e) {
-                    return const Text("Data Format Error", style: TextStyle(color: Colors.orange));
-                  }
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGlassCard(String title, String value, Color color) {
-    return GlassContainer.frostedGlass(
-      height: 170,
-      width: 320,
-      borderRadius: BorderRadius.circular(30),
-      borderWidth: 1.5,
-      gradient: LinearGradient(
-        colors: [Colors.white.withOpacity(0.1), Colors.white.withOpacity(0.05)],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(title, style: const TextStyle(fontSize: 16, color: Colors.white60, letterSpacing: 1.2)),
-          const SizedBox(height: 10),
-          Text(value, style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: color, shadows: [
-            Shadow(color: color.withOpacity(0.5), blurRadius: 20)
-          ])),
-        ],
-      ),
+        // USB Tab
+        const Center(child: Text("1. Enable USB Tethering\n2. Enter PC Gateway IP above", textAlign: TextAlign.center)),
+      ]),
     );
   }
 }

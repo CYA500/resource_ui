@@ -1,127 +1,45 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:glass_kit/glass_kit.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'dart:convert';
-import 'dart:io';
+import 'package:google_fonts/google_fonts.dart';
 
-void main() => runApp(const MaterialApp(
-  home: HomePage(),
+void main() => runApp(MaterialApp(
+  theme: ThemeData.dark().copyWith(textTheme: GoogleFonts.orbitronTextTheme()),
+  home: const HomePage(),
   debugShowCheckedModeBanner: false,
 ));
 
-// --- منطق الاتصال ---
-class ConnectionService {
-  static Future<dynamic> tryConnect(String ip) async {
-    final String url = 'ws://${ip.trim()}:5050';
-    try {
-      final socket = await WebSocket.connect(url).timeout(const Duration(seconds: 5));
-      return IOWebSocketChannel(socket);
-    } on SocketException catch (e) {
-      if (e.message.contains("113")) return "Firewall is blocking the connection.";
-      if (e.message.contains("111")) return "Server is not running on PC.";
-      return "Network error: ${e.message}";
-    } catch (e) {
-      return "Connection Failed: $e";
-    }
-  }
-}
-
-// --- الواجهة الرئيسية ---
+// --- شاشة البداية والربط ---
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final TextEditingController _ipController = TextEditingController();
-
-  @override
-  void initState() {
-    _tabController = TabController(length: 3, vsync: this);
-    super.initState();
-  }
-
-  void _startConnection(String ip) async {
-    if (ip.isEmpty) return;
-    
-    showDialog(
-      context: context, 
-      barrierDismissible: false, 
-      builder: (c) => const Center(child: CircularProgressIndicator(color: Colors.cyanAccent))
-    );
-    
-    var result = await ConnectionService.tryConnect(ip);
-    Navigator.pop(context); // إغلاق التحميل
-
-    if (result is String) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result), backgroundColor: Colors.redAccent)
-      );
-    } else {
-      Navigator.push(
-        context, 
-        MaterialPageRoute(builder: (c) => MonitorPage(channel: result, ip: ip))
-      );
-    }
+class _HomePageState extends State<HomePage> {
+  void _connect(String ip) {
+    final channel = IOWebSocketChannel.connect(Uri.parse('ws://$ip:5050'));
+    Navigator.push(context, MaterialPageRoute(builder: (c) => MonitorPage(channel: channel, ip: ip)));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A2E),
-      appBar: AppBar(
-        title: const Text("PC Monitor PRO"),
-        backgroundColor: const Color(0xFF16213E),
-        bottom: TabBar(controller: _tabController, tabs: const [
-          Tab(icon: Icon(Icons.qr_code_scanner), text: "QR"),
-          Tab(icon: Icon(Icons.lan), text: "IP"),
-          Tab(icon: Icon(Icons.usb), text: "USB"),
-        ]),
+      body: Stack(
+        children: [
+          MobileScanner(onDetect: (cap) => _connect(cap.barcodes.first.rawValue ?? "")),
+          Center(child: Container(width: 200, height: 200, decoration: BoxDecoration(border: Border.all(color: Colors.cyanAccent, width: 2), borderRadius: BorderRadius.circular(20)))),
+          const Positioned(bottom: 50, left: 0, right: 0, child: Text("SCAN PC QR CODE", textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 20, letterSpacing: 3)))
+        ],
       ),
-      body: TabBarView(controller: _tabController, children: [
-        // تبويب الـ QR
-        MobileScanner(onDetect: (cap) {
-          final String? code = cap.barcodes.first.rawValue;
-          if (code != null) _startConnection(code);
-        }),
-        // تبويب الـ IP
-        Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(children: [
-            TextField(
-              controller: _ipController,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: "Enter PC IP Address",
-                labelStyle: TextStyle(color: Colors.cyanAccent),
-                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-              ),
-            ),
-            const SizedBox(height: 30),
-            ElevatedButton(
-              onPressed: () => _startConnection(_ipController.text),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent, foregroundColor: Colors.black),
-              child: const Text("Connect via WiFi"),
-            ),
-          ]),
-        ),
-        // تبويب الـ USB
-        const Center(
-          child: Text(
-            "1. Connect USB Cable\n2. Enable USB Tethering\n3. Type PC IP from Server screen",
-            style: TextStyle(color: Colors.white70, fontSize: 16),
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ]),
     );
   }
 }
 
-// --- شاشة عرض البيانات ---
+// --- شاشة المراقبة والتحكم (الجمالية) ---
 class MonitorPage extends StatelessWidget {
   final WebSocketChannel channel;
   final String ip;
@@ -130,38 +48,76 @@ class MonitorPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(title: Text("Monitoring: $ip"), backgroundColor: Colors.transparent),
-      body: StreamBuilder(
-        stream: channel.stream,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) return const Center(child: Text("Connection Lost", style: TextStyle(color: Colors.red)));
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          
-          var data = jsonDecode(snapshot.data.toString());
-          return Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _infoCard("CPU USAGE", "${data['cpu']}%", Colors.greenAccent),
-              const SizedBox(height: 20),
-              _infoCard("RAM AVAILABLE", "${data['ram']} MB", Colors.blueAccent),
-            ],
-          );
-        },
+      backgroundColor: Colors.black,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(colors: [Color(0xFF000428), Color(0xFF004e92)], begin: Alignment.topLeft),
+        ),
+        child: StreamBuilder(
+          stream: channel.stream,
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+            var data = jsonDecode(snapshot.data.toString());
+
+            return Column(
+              children: [
+                const SizedBox(height: 50),
+                Text("DASHBOARD: $ip", style: const TextStyle(color: Colors.cyanAccent, fontSize: 12)),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.all(20),
+                    children: [
+                      _buildMetric("PROCESSOR", "${data['cpu']}%", Colors.cyanAccent, data['cpu'] / 100),
+                      _buildMetric("MEMORY", "${data['ram']} MB", Colors.magentaAccent, 0.5),
+                      _buildMetric("DISK LOAD", "${data['disk']}%", Colors.orangeAccent, data['disk'] / 100),
+                      const SizedBox(height: 30),
+                      const Text("ADVANCED COMMANDS", style: TextStyle(color: Colors.white38, fontSize: 10)),
+                      const SizedBox(height: 15),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _cmdBtn("RAM CLEAN", Icons.auto_fix_high, () => channel.sink.add("CLEAN_RAM")),
+                          _cmdBtn("KILL APPS", Icons.apps_outage, () => channel.sink.add("CLOSE_WINDOWS")),
+                          _cmdBtn("GAME MODE", Icons.bolt, () => channel.sink.add("GAME_MODE")),
+                        ],
+                      )
+                    ],
+                  ),
+                )
+              ],
+            );
+          },
+        ),
       ),
     );
   }
 
-  Widget _infoCard(String label, String value, Color color) {
-    return Center(
-      child: Container(
-        width: 300, padding: const EdgeInsets.all(25),
-        decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(20)),
-        child: Column(children: [
-          Text(label, style: const TextStyle(color: Colors.white54, fontSize: 14)),
-          const SizedBox(height: 10),
-          Text(value, style: TextStyle(color: color, fontSize: 45, fontWeight: FontWeight.bold)),
-        ]),
+  Widget _buildMetric(String title, String val, Color color, double progress) {
+    return GlassContainer.frostedGlass(
+      height: 110, width: double.infinity, margin: const EdgeInsets.symmetric(vertical: 8),
+      borderRadius: BorderRadius.circular(20), borderColor: color.withOpacity(0.3),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            CircularProgressIndicator(value: progress, color: color, strokeWidth: 8, backgroundColor: Colors.white10),
+            const SizedBox(width: 25),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: TextStyle(color: color, fontSize: 12)),
+              Text(val, style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
+            ])
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cmdBtn(String label, IconData icon, VoidCallback tap) {
+    return InkWell(
+      onTap: tap,
+      child: GlassContainer.frostedGlass(
+        height: 100, width: 100, borderRadius: BorderRadius.circular(20),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, color: Colors.white), const SizedBox(height: 10), Text(label, style: const TextStyle(fontSize: 9))]),
       ),
     );
   }
